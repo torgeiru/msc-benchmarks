@@ -1,0 +1,30 @@
+{
+  includeos_path ? import ../includeos_source.nix
+}
+:
+let
+  includeos = import includeos_path {};
+  pkgsStatic = includeos.pkgs.pkgsStatic;
+  pkgsStaticStdenv = pkgsStatic.stdenv;
+in
+pkgsStaticStdenv.mkDerivation {
+  name = "VirtioFS_bench Linux";
+  version = "dev";
+  src = ./src;
+
+  inherit (includeos) nativeBuildInputs;
+
+  buildInputs = [
+    pkgsStatic.liburing
+    # pkgsStatic.clang
+  ];
+
+  cmakeFlags = [
+    "-DCMAKE_CXX_STANDARD=20"
+  ];
+
+  installPhase = ''
+    mkdir -p $out/bin
+    cp virtiofs_bench $out/bin/
+  '';
+}
