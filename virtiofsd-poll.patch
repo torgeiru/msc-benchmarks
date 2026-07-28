@@ -1,0 +1,39 @@
+diff --git a/src/vhost_user.rs b/src/vhost_user.rs
+index 2b46e27..1b79a39 100644
+--- a/src/vhost_user.rs
++++ b/src/vhost_user.rs
+@@ -7,6 +7,7 @@ use std::fs::File;
+ use std::sync::atomic::{AtomicBool, Ordering};
+ use std::sync::{Arc, Mutex, RwLock};
+ use std::thread::{self, JoinHandle};
++use std::time::{Duration, Instant};
+ use std::{convert, error, fmt, io};
+ 
+ use futures::executor::{ThreadPool, ThreadPoolBuilder};
+@@ -356,7 +357,25 @@ impl<F: FileSystem + SerializableFileSystem + Send + Sync + 'static> VhostUserFs
+             }
+         } else {
+             // Without EVENT_IDX, a single call is enough.
+-            self.process_queue_serial(&mut vring_state)?;
++            if device_event == HIPRIO_QUEUE_EVENT {
++                self.process_queue_serial(&mut vring_state)?;
++            } else {
++                // Run the process queue at least one time
++                self.process_queue_serial(&mut vring_state)?;
++
++                // We want to check whether sleeping accounts for the large performance discrepancy
++                // between host and IncludeOS
++                // Run until deadline times out
++                let mut deadline = Instant::now() + Duration::from_millis(300);
++                while Instant::now() < deadline {
++                    let processed_used_ring = self.process_queue_serial(&mut vring_state).unwrap();
++
++                    // Reset deadline if an entry was processed
++                    if processed_used_ring {
++                        deadline = Instant::now() + Duration::from_millis(300);
++                    }
++                }
++            }
+         }
+ 
+         Ok(())
